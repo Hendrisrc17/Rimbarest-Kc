@@ -1,0 +1,57 @@
+name: rimbarest
+description: RimbaRest - Instrumen Cerdas Deteksi Audio dan Partikulat Bangka Belitung
+
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  excel: ^4.0.3
+
+  share_plus: ^13.2.1
+  firebase_core: ^3.0.0
+  firebase_messaging: ^15.0.0
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  http: ^1.6.0
+  shared_preferences: ^2.5.5
+  imagewidget: ^1.2.2
+  image_picker: ^1.1.2
+  video_player: ^2.11.1
+  permission_handler: ^11.3.1
+  google_maps_flutter: ^2.12.0
+  fl_chart: ^1.2.0
+  intl: ^0.20.3
+  audioplayers: ^6.8.1
+  path_provider: ^2.1.6
+  geolocator: ^14.0.3
+  flutter_map: ^8.3.1
+  latlong2: ^0.10.1
+  flutter_local_notifications: ^22.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# 🚀 KONFIGURASI IKON APLIKASI
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo_rimbarest.png" # Updated path
+  min_sdk_android: 21
+  remove_alpha_ios: true
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/logo.png
+    - assets/videos/splash_logo.mp4
+    - assets/videos/splash_logo.MOV
+    - assets/images/logo_rimbarest.png

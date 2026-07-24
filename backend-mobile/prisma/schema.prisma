@@ -1,0 +1,181 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String   @id @default(uuid())
+  username            String   @unique
+  email               String   @unique
+  password            String
+  firstName           String?
+  lastName            String?
+  phone               String?
+  role                Role     @default(PENGGUNA)
+  photo               String?
+  address             String?
+  isActive            Boolean  @default(true)
+  locationEnabled     Boolean  @default(true)
+  nightMode           Boolean  @default(false)
+  notificationEnabled Boolean  @default(true)
+  syncInterval        String   @default("5 detik")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  deviceTokens  DeviceToken[]
+  systemLogs    SystemLog[]
+  notifications Notification[]
+}
+
+model AppSetting {
+  id                  String   @id @default(uuid())
+  appName             String   @default("RIMBAREST")
+  notificationEnabled Boolean  @default(true)
+  mapEnabled          Boolean  @default(true)
+  maintenanceMode     Boolean  @default(false)
+  updatedAt           DateTime @updatedAt
+}
+
+model DeviceNode {
+  id             String        @id @default(uuid())
+  nodeCode       String        @unique
+  name           String        
+  locationName   String?
+  latitude       Decimal?      @db.Decimal(10, 7)
+  longitude      Decimal?      @db.Decimal(10, 7)
+  status         DeviceStatus  @default(OFFLINE)
+  batteryLevel   Float?
+  signalStrength Float?
+  
+  // 🚀 TAMBAHKAN KOLOM INI DI SCHEMA PRISMA LU:
+  quotaInternet  Float?        @default(0.0) 
+  
+  lastSeen       DateTime?
+  description    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  sensorReadings SensorReading[]
+  audioIncidents AudioIncident[] 
+  systemLogs     SystemLog[]
+  notifications  Notification[]
+
+  @@index([nodeCode])
+  @@index([status])
+}
+
+model SensorReading {
+  id            String         @id @default(uuid())
+  nodeId        String
+  latitude      Decimal?       @db.Decimal(10, 7)
+  longitude     Decimal?       @db.Decimal(10, 7)
+  pm1           Float?
+  pm25          Float?
+  pm10          Float?
+  temperature   Float?
+  humidity      Float?
+  noiseLevel    Float?         
+  statusTerpadu String?        
+  cacheSource   Boolean        @default(false)
+  rawPayload    Json
+  recordedAt    DateTime       @default(now())
+  
+  node          DeviceNode     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  audioIncident AudioIncident? 
+
+  @@index([nodeId])
+  @@index([recordedAt])
+}
+
+model AudioIncident {
+  id              String        @id @default(uuid())
+  nodeId          String
+  sensorReadingId String        @unique 
+  audioUrl        String        
+  predictionScore Float         
+  label           String        
+  createdAt       DateTime      @default(now())
+
+  node          DeviceNode    @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  sensorReading SensorReading @relation(fields: [sensorReadingId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId])
+  @@index([createdAt])
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique 
+  platform  String?  
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  nodeId    String?
+  level     LogLevel @default(INFO)
+  action    String
+  message   String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User?       @relation(fields: [userId], references: [id])
+  node DeviceNode? @relation(fields: [nodeId], references: [id])
+
+  @@index([userId])
+  @@index([nodeId])
+  @@index([level])
+  @@index([createdAt])
+}
+
+enum Role {
+  ADMIN
+  PENGGUNA
+}
+
+enum DeviceStatus {
+  ONLINE
+  OFFLINE
+  MAINTENANCE
+}
+
+enum LogLevel {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+// 🌟 FIX UTAMA: Mengubah id menjadi Int autoincrement & status menjadi String 
+// agar sinkron penuh dengan fungsi `int.parse` & logika pembacaan notifikasi di Flutter.
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    String?
+  nodeId    String?
+  title     String
+  message   String?
+  type      String   @default("INFO")
+  status    String   @default("belum_dibaca")
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  node DeviceNode? @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([nodeId])
+  @@index([status])
+  @@index([createdAt])
+}
