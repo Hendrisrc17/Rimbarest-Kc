@@ -18,8 +18,15 @@ function isLabelAncaman(label: string): boolean {
   return DAFTAR_ANCAMAN_LEGACY.some((threat) => normalized.includes(threat.toLowerCase()));
 }
 
+// 🌐 MENGAMBIL BASE URL DARI `.env` MURNI (TANPA HARDCODED LOCALHOST FALLBACK)
 function aiBaseUrl(): string {
-  let url = (process.env.AI_SERVER_URL || 'http://localhost:8000').trim();
+  const rawUrl = process.env.AI_SERVER_URL;
+  if (!rawUrl) {
+    console.error('❌ [ENV ERROR] AI_SERVER_URL belum didefinisikan di dalam file .env!');
+    throw new Error('Konfigurasi server AI belum diset di .env');
+  }
+
+  let url = rawUrl.trim();
   url = url.replace(/\/+$/, '');
   url = url.replace(/\/(predict-iot|predict|evaluate-condition)$/i, '');
   return url;
@@ -43,7 +50,7 @@ function parseRemainingMb(raw: unknown): number | null {
 }
 
 // 🧠 HELPER DENGAN PENANGANAN NULL/INVALID LAT & LNG SENSOR RIIL
-function parseCoordinate(val: any): number | null {
+function parseCoordinate(val: unknown): number | null {
   if (val === undefined || val === null || val === '') return null;
   const num = Number(val);
   if (!Number.isFinite(num) || num === 0) return null;
@@ -110,7 +117,7 @@ async function sendQuotaTierNotification(tier: 'CRITICAL' | 'WARNING', nodeCode:
   });
 }
 
-async function checkAndTriggerQuotaNotification(nodeCode: string, quotaAlertField: any, remainingMbField: any, deviceNodeId: string) {
+async function checkAndTriggerQuotaNotification(nodeCode: string, quotaAlertField: unknown, remainingMbField: unknown, deviceNodeId: string) {
   const remainingMb = parseRemainingMb(remainingMbField);
 
   if (remainingMb !== null) {
@@ -130,6 +137,18 @@ async function checkAndTriggerQuotaNotification(nodeCode: string, quotaAlertFiel
 
 export async function POST(request: Request) {
   try {
+    // 🛡️ 1. KEAMANAN OTENTIKASI X-API-KEY
+    const apiKeyHeader = request.headers.get('x-api-key') || request.headers.get('X-API-KEY');
+    const validSecretKey = process.env.ENV_API_SECRET;
+
+    if (!validSecretKey || apiKeyHeader !== validSecretKey) {
+      console.warn(`🔒 [SECURITY WARNING] Akses ilegal terdeteksi ke /api/iot/sensor! Token: "${apiKeyHeader}"`);
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized: Header x-api-key tidak valid atau tidak disertakan.' },
+        { status: 401 }
+      );
+    }
+
     const contentType = request.headers.get('content-type') || '';
 
     if (contentType.includes('multipart/form-data')) {
@@ -195,7 +214,7 @@ async function handleDeviceUpload(request: Request) {
       }
     });
   } else {
-    // 🔥 PERBAIKAN: SINKRONKAN LAT/LNG TERBARU KE TABEL DEVICENODE
+    // 🔥 SINKRONKAN LAT/LNG TERBARU KE TABEL DEVICENODE
     await prisma.deviceNode.update({
       where: { id: deviceNode.id },
       data: {
@@ -235,8 +254,8 @@ async function handleDeviceUpload(request: Request) {
       temperature: suhu,
       humidity: kelembapan,
       noiseLevel,
-      latitude: lat ?? deviceNode.latitude,
-      longitude: lng ?? deviceNode.longitude,
+      latitude: lat ?? (deviceNode.latitude as number | null),
+      longitude: lng ?? (deviceNode.longitude as number | null),
       statusTerpadu: '🔄 Menganalisis AI',
       cacheSource,
       rawPayload: JSON.stringify(initialPayload),
@@ -283,6 +302,9 @@ async function handleDeviceUpload(request: Request) {
 
   fetch(`${aiBaseUrl()}/predict-iot`, {
     method: 'POST',
+    headers: {
+      'x-api-key': process.env.ENV_API_SECRET || ''
+    },
     body: predictFormData,
   }).catch((err) => console.error('⚠️ [AI Gateway Error]:', err.message));
 
@@ -305,12 +327,12 @@ async function handleSensorOnly(
     noiseLevel: number;
     nodeCode: string;
     cacheSource: boolean;
-    latitude?: any;
-    longitude?: any;
-    quotaAlert?: any;
-    remainingMb?: any;
+    latitude?: unknown;
+    longitude?: unknown;
+    quotaAlert?: unknown;
+    remainingMb?: unknown;
   },
-  preloadedNode?: { id: string; nodeCode: string; latitude?: any; longitude?: any } | null,
+  preloadedNode?: { id: string; nodeCode: string; latitude?: unknown; longitude?: unknown } | null,
   isQuotaAlreadyChecked: boolean = false
 ) {
   const pm1 = Number(data.pm1 ?? 0);
@@ -365,6 +387,9 @@ async function handleSensorOnly(
 
     const evalResponse = await fetch(`${aiBaseUrl()}/evaluate-condition`, {
       method: 'POST',
+      headers: {
+        'x-api-key': process.env.ENV_API_SECRET || ''
+      },
       body: evalForm,
       signal: withTimeoutSignal(6000),
     });
@@ -404,8 +429,8 @@ async function handleSensorOnly(
       temperature: suhu,
       humidity: kelembapan,
       noiseLevel,
-      latitude: lat ?? deviceNode.latitude,
-      longitude: lng ?? deviceNode.longitude,
+      latitude: lat ?? (deviceNode.latitude as number | null),
+      longitude: lng ?? (deviceNode.longitude as number | null),
       statusTerpadu,
       cacheSource,
       rawPayload: JSON.stringify(enrichedPayload),
@@ -528,8 +553,8 @@ async function handleAiCallback(body: any) {
       where: { id: readingId },
       data: {
         statusTerpadu: statusFinalTerpadu,
-        latitude: lat ?? deviceNode.latitude,
-        longitude: lng ?? deviceNode.longitude,
+        latitude: lat ?? (deviceNode.latitude as number | null),
+        longitude: lng ?? (deviceNode.longitude as number | null),
         rawPayload: JSON.stringify(enrichedPayload),
       }
     }).catch(() => null);
@@ -545,8 +570,8 @@ async function handleAiCallback(body: any) {
         temperature: suhu,
         humidity: kelembapan,
         noiseLevel,
-        latitude: lat ?? deviceNode.latitude,
-        longitude: lng ?? deviceNode.longitude,
+        latitude: lat ?? (deviceNode.latitude as number | null),
+        longitude: lng ?? (deviceNode.longitude as number | null),
         statusTerpadu: statusFinalTerpadu,
         cacheSource,
         rawPayload: JSON.stringify(enrichedPayload),
