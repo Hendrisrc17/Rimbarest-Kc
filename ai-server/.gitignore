@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual Environment
+venv/
+.venv/
+
+# Environment
+.env
+
+# Debug
+debug_iot_audio/
+logs/
+temp/
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# AI Model
+*.h5
+*.keras
+*.joblib
+
+# Windows
+Thumbs.db

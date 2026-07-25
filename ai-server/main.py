@@ -379,7 +379,14 @@ async def predict_iot(
     kelembapan: float = Form(None), humidity: float = Form(None),
     noiseLevel: float = Form(52.0), nodeCode: str = Form("NODE-001"),
     readingId: str = Form(None),
-    audioUrl: str = Form(None)
+    audioUrl: str = Form(None),
+    # ✅ FIX: latitude & longitude sebelumnya TIDAK dideklarasikan di sini.
+    # FastAPI otomatis membuang field multipart yang tidak dideklarasikan
+    # sebagai parameter, jadi walau ESP32 sudah kirim latitude/longitude,
+    # field itu hilang begitu sampai di endpoint ini. Ini akar masalah
+    # kenapa koordinat GPS selalu null di database.
+    latitude: float = Form(None),
+    longitude: float = Form(None),
 ):
     audio_bytes = b""
     if file is not None:
@@ -399,6 +406,9 @@ async def predict_iot(
             nodeCode = str(body.get("nodeCode", "NODE-001"))
             readingId = body.get("readingId", readingId)
             audioUrl = body.get("audioUrl", None)
+            # ✅ FIX: ikutkan latitude/longitude juga di jalur JSON
+            latitude = body.get("latitude", latitude)
+            longitude = body.get("longitude", longitude)
         except Exception:
             pass
     else:
@@ -417,12 +427,15 @@ async def predict_iot(
         print(f"\n=======================================================")
         print(f"📡 [AI ENGINE LIVE] Node: {nodeCode} | Reading ID: {readingId}")
         print(f"📊 Fitur Input -> PM2.5: {pm25} µg/m³, Suhu: {suhu}°C, Humid: {kelembapan}%")
+        print(f"📍 GPS Input   -> Lat: {latitude}, Lng: {longitude}")
         print(f"🔊 Suara AI Output  -> Label: {final_audio_label} | Confidence: {confidence_score_audio * 100:.2f}% | Model dipakai: {is_model_prediction}")
         print(f"🧠 Status Terpadu   -> Hasil Keputusan Status: {air_result['status']}")
         print(f"=======================================================\n")
 
+        # ✅ FIX: latitude & longitude ikut diteruskan ke _forward_result
         fwd_args = (nodeCode, pm1, pm25, pm10, suhu, kelembapan, noiseLevel,
-                    final_audio_label, confidence_score_audio, raw_score, air_result, audioUrl, saved_fn, readingId, is_model_prediction)
+                    final_audio_label, confidence_score_audio, raw_score, air_result, audioUrl, saved_fn, readingId, is_model_prediction,
+                    latitude, longitude)
 
         if background_tasks is not None:
             background_tasks.add_task(_forward_result, *fwd_args)
@@ -438,14 +451,18 @@ async def predict_iot(
             "aiStatusResult": air_result['status'],
             "kategoriAsap": air_result['kat_asap'],
             "isModelPrediction": is_model_prediction,  # 🔥 baru: transparansi ke Next.js/Flutter
+            "latitude": latitude,    # ✅ FIX: ikut dikembalikan di response juga (opsional, buat debug)
+            "longitude": longitude,  # ✅ FIX
         })
 
     except Exception as exc:
         print(f"⚠️ [AI TIMEOUT / ERROR] {exc}")
         air_result = evaluate_air_condition(nodeCode, pm1, pm25, pm10, suhu, kelembapan, LABEL_NEGATIF)
 
+        # ✅ FIX: latitude & longitude ikut diteruskan di jalur exception juga
         fwd_args = (nodeCode, pm1, pm25, pm10, suhu, kelembapan, noiseLevel,
-                    LABEL_NEGATIF, 0.0, 0.0, air_result, audioUrl, saved_fn, readingId, False)
+                    LABEL_NEGATIF, 0.0, 0.0, air_result, audioUrl, saved_fn, readingId, False,
+                    latitude, longitude)
 
         if background_tasks is not None:
             background_tasks.add_task(_forward_result, *fwd_args)
@@ -461,11 +478,14 @@ async def predict_iot(
             "aiStatusResult": air_result['status'],
             "kategoriAsap": air_result['kat_asap'],
             "isModelPrediction": False,
+            "latitude": latitude,    # ✅ FIX
+            "longitude": longitude,  # ✅ FIX
         }, status_code=202)
 
 
 async def _forward_result(nodeCode, pm1, pm25, pm10, suhu, kelembapan, noiseLevel,
-                           final_audio_label, confidence_score_audio, raw_score, air_result, audioUrl, saved_filename, readingId=None, is_model_prediction=False):
+                           final_audio_label, confidence_score_audio, raw_score, air_result, audioUrl, saved_filename, readingId=None, is_model_prediction=False,
+                           latitude=None, longitude=None):  # ✅ FIX: parameter baru, punya default None supaya backward-compatible
     chosen_file = ""
     if saved_filename:
         chosen_file = os.path.basename(saved_filename)
@@ -482,7 +502,9 @@ async def _forward_result(nodeCode, pm1, pm25, pm10, suhu, kelembapan, noiseLeve
         "aiStatusResult": air_result['status'], "audioUrl": final_url, "kat_asap": air_result['kat_asap'],
         "aiKategoriAsap": air_result['kat_asap'],
         "readingId": readingId,
-        "isModelPrediction": is_model_prediction,  # 🔥 diteruskan ke Next.js juga
+        "isModelPrediction": is_model_prediction,
+        "latitude": latitude,     # ✅ FIX: ini yang tadinya hilang — sekarang ikut dikirim ke Next.js
+        "longitude": longitude,   # ✅ FIX
     }
 
     urls_to_try = [
